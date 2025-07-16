@@ -45,12 +45,6 @@ steps:
       # Verify deployment
       - docker-compose ps
 
-    volumes:
-      # Mount NAS storage
-      - name: nas-storage
-        path: /mnt/nas-direct
-        host:
-          path: /mnt/nas-direct
 
     when:
       branch:
