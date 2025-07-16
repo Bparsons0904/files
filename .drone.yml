@@ -1,0 +1,134 @@
+kind: pipeline
+type: docker
+name: seafile-deploy
+
+steps:
+  - name: deploy
+    image: docker:24-cli
+    environment:
+      # Environment variables from Drone secrets
+      SEAFILE_MYSQL_ROOT_PASSWORD:
+        from_secret: seafile_mysql_root_password
+      SEAFILE_MYSQL_DB:
+        from_secret: seafile_mysql_db
+      SEAFILE_DATA:
+        from_secret: seafile_data
+      SEAFILE_ADMIN_EMAIL:
+        from_secret: seafile_admin_email
+      SEAFILE_ADMIN_PASSWORD:
+        from_secret: seafile_admin_password
+      SEAFILE_SERVER_HOSTNAME:
+        from_secret: seafile_server_hostname
+    commands:
+      # Install docker-compose
+      - apk add --no-cache docker-compose
+
+      # Create dedicated network if it doesn't exist
+      - docker network create seafile-network || true
+
+      # Create NAS storage directories
+      - mkdir -p /mnt/nas-direct/seafile-data
+      - mkdir -p /mnt/nas-direct/seafile-mysql
+
+      # Stop existing services gracefully
+      - docker-compose down || true
+
+      # Pull latest images
+      - docker-compose pull
+
+      # Start services
+      - docker-compose up -d
+
+      # Wait for services to be healthy
+      - sleep 30
+
+      # Verify deployment
+      - docker-compose ps
+
+    volumes:
+      # Mount NAS storage
+      - name: nas-storage
+        path: /mnt/nas-direct
+        host:
+          path: /mnt/nas-direct
+
+    when:
+      branch:
+        - main
+      event:
+        - push
+
+  - name: health-check
+    image: alpine:latest
+    commands:
+      - apk add --no-cache curl
+      - sleep 60 # Wait for services to fully start
+      - curl -f https://files.bobparsons.dev || exit 1
+    when:
+      branch:
+        - main
+      event:
+        - push
+    depends_on:
+      - deploy
+
+---
+kind: pipeline
+type: docker
+name: notify
+
+steps:
+  - name: notify-success
+    image: plugins/webhook
+    settings:
+      urls:
+        from_secret: webhook_success_url
+      template: |
+        {
+          "text": "✅ Seafile deployment successful on files.bobparsons.dev"
+        }
+    when:
+      status:
+        - success
+
+  - name: notify-failure
+    image: plugins/webhook
+    settings:
+      urls:
+        from_secret: webhook_failure_url
+      template: |
+        {
+          "text": "❌ Seafile deployment failed - check logs"
+        }
+    when:
+      status:
+        - failure
+
+depends_on:
+  - seafile-deploy
+
+---
+kind: pipeline
+type: docker
+name: cleanup
+
+steps:
+  - name: cleanup-old-images
+    image: docker:24-cli
+    commands:
+      - docker system prune -f --filter "until=24h"
+      - docker image prune -f --filter "until=24h"
+    when:
+      branch:
+        - main
+      event:
+        - push
+    depends_on:
+      - seafile-deploy
+
+trigger:
+  branch:
+    - main
+  event:
+    - push
+
