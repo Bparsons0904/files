@@ -16,16 +16,17 @@ This is a Seafile deployment project that uses Docker Compose to orchestrate a s
 The application consists of three main services:
 
 1. **seafile-mysql**: MariaDB 10.11 database container with persistent storage
-2. **memcached**: Alpine-based memcached for caching (256MB allocation)
+2. **memcached**: Alpine-based memcached for caching (1GB allocation)
 3. **seafile**: Main Seafile application with volume mounts and environment configuration
 
 ### Network Configuration
-- **seafile**: Internal bridge network for service communication
-- **proxy**: External network for Traefik reverse proxy integration
+- **traefik**: External network for reverse proxy routing
+- **seafile-network**: Dedicated network for service communication
 
 ### Storage
-- Database: `${SEAFILE_MYSQL_DB}` directory mounted to `/var/lib/mysql`
-- Seafile data: `${SEAFILE_DATA}` directory mounted to `/shared`
+- Database: `/home/server/files/seafile-mysql` mounted to `/var/lib/mysql`
+- Seafile data: `/home/server/files/seafile` mounted to `/shared`
+- Library data: `/mnt/nas-direct/seafile-library` mounted to `/shared/seafile/seafile-data`
 
 ## Common Commands
 
@@ -40,12 +41,6 @@ cp .env.example .env
 ```bash
 # Create dedicated network (required for deployment)
 docker network create seafile-network
-
-# Create NAS storage directories
-sudo mkdir -p /mnt/nas-direct/seafile-data
-sudo mkdir -p /mnt/nas-direct/seafile-mysql
-sudo chown -R 1000:1000 /mnt/nas-direct/seafile-data
-sudo chown -R 1000:1000 /mnt/nas-direct/seafile-mysql
 ```
 
 ### Service Management
@@ -95,23 +90,9 @@ docker stats
 All configuration is managed through Drone secrets (production) or environment variables (local development):
 
 - `SEAFILE_MYSQL_ROOT_PASSWORD`: Database root password
-- `SEAFILE_MYSQL_DB`: Database volume mount path (local dev only)
-- `SEAFILE_DATA`: Seafile data volume mount path (local dev only)
 - `SEAFILE_ADMIN_EMAIL`: Initial admin account email
 - `SEAFILE_ADMIN_PASSWORD`: Initial admin account password
-- `SEAFILE_SERVER_HOSTNAME`: Domain name for the service
-
-### Storage Configuration
-
-**Production (NAS Storage)**:
-- Database: `/mnt/nas-direct/seafile-mysql`
-- Seafile data: `/mnt/nas-direct/seafile-data`
-- High-performance SMB/CIFS mount (285 MB/s)
-
-**Local Development**:
-- Use `.env` file with local paths
-- Database: `./seafile-mysql`
-- Seafile data: `./seafile-data`
+- `SEAFILE_SERVER_HOSTNAME`: Domain name for the service (files.waugze.com)
 
 ### Network Architecture
 
@@ -123,7 +104,7 @@ All configuration is managed through Drone secrets (production) or environment v
 ### Traefik Labels
 The service includes Traefik configuration for:
 - HTTPS termination with Let's Encrypt
-- Custom domain routing (`files.bobparsons.dev`)
+- Custom domain routing (`files.waugze.com`)
 - Security headers middleware
 - Extended timeout middleware for large file uploads (3600s)
 - Health checks and automatic failover
@@ -138,7 +119,6 @@ This project uses Drone CI for automated deployment. The `.drone.yml` configurat
 - **Environment variable management** via Drone secrets
 - **Health checks** to verify successful deployment
 - **Cleanup tasks** to manage Docker images
-- **Notifications** for deployment status
 
 ### Required Drone Secrets
 
@@ -146,26 +126,19 @@ Configure these secrets in your Drone CI dashboard:
 
 ```bash
 # Seafile configuration
-seafile_mysql_root_password    # Database root password
-seafile_mysql_db              # Database volume path
-seafile_data                  # Seafile data volume path
-seafile_admin_email           # Admin account email
-seafile_admin_password        # Admin account password
-seafile_server_hostname       # Server hostname (files.bobparsons.dev)
-
-# Notification webhooks (optional)
-webhook_success_url           # Success notification webhook
-webhook_failure_url           # Failure notification webhook
+SEAFILE_MYSQL_ROOT_PASSWORD    # Database root password
+SEAFILE_ADMIN_EMAIL           # Admin account email
+SEAFILE_ADMIN_PASSWORD        # Admin account password
+SEAFILE_SERVER_HOSTNAME       # Server hostname (files.waugze.com)
 ```
 
 ### Deployment Process
 
 1. **Push to main branch** triggers automatic deployment
-2. **Network creation** ensures dedicated network exists
-3. **Storage preparation** creates NAS directories
+2. **Cleanup step** removes volumes and prunes Docker system
+3. **Network creation** ensures dedicated network exists
 4. **Service deployment** pulls latest images and starts services
 5. **Health verification** confirms services are running
-6. **Cleanup** removes old Docker images
 
 ## Development Workflow
 
@@ -179,10 +152,28 @@ This is primarily a deployment configuration, not a development codebase. Change
 ## Troubleshooting
 
 ### Common Issues
+- **User/Permission Issues**: Fixed by running Seafile container as root (`user: "0:0"`)
+- **Mount Structure Conflicts**: Use single mount point for initial setup
 - **Database Connection**: Ensure MariaDB is healthy before Seafile starts
 - **File Upload Limits**: Check Traefik timeout middleware configuration
 - **SSL/TLS**: Verify Let's Encrypt certificate generation through Traefik
 - **Data Persistence**: Ensure volume mounts are correctly configured
+- **Existing Data Conflicts**: Pipeline includes cleanup step to ensure fresh deployment
+
+### Manual Cleanup (if needed)
+```bash
+# Stop all containers and remove volumes
+docker-compose down --volumes
+
+# Remove seafile directory for fresh start
+rm -rf /home/server/files/seafile
+
+# Clean Docker system
+docker system prune -f
+
+# Redeploy
+docker-compose up -d
+```
 
 ### Health Checks
 ```bash
@@ -200,9 +191,6 @@ docker-compose exec seafile ls -la /shared
 
 - **Secrets Management**: All sensitive data stored in Drone secrets
 - **Network Isolation**: Database services isolated from public networks
-- **File Permissions**: Proper ownership on NAS storage directories
 - **SSL/TLS**: Automatic HTTPS via Let's Encrypt
 - **Security Headers**: Applied via Traefik middleware
-- **Resource Limits**: Memory and CPU limits prevent resource exhaustion
 - **Health Checks**: Automatic service monitoring and restart
-- **Regular Updates**: Automated image updates via CI/CD pipeline

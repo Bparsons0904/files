@@ -3,6 +3,17 @@ type: docker
 name: seafile-deploy
 
 steps:
+  - name: cleanup
+    image: docker:24-cli
+    commands:
+      - docker-compose down --volumes || true
+      - docker system prune -f || true
+    when:
+      branch:
+        - main
+      event:
+        - push
+
   - name: deploy
     image: docker:24-cli
     environment:
