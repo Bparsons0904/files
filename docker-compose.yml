@@ -13,7 +13,7 @@ services:
       - MYSQL_LOG_CONSOLE=true
       - MARIADB_AUTO_UPGRADE=1
     volumes:
-      - /mnt/nas-direct/seafile-mysql:/var/lib/mysql
+      - /home/server/files/seafile-mysql:/var/lib/mysql
     networks:
       - seafile-network
     restart: unless-stopped
@@ -25,14 +25,14 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 4G
         reservations:
-          memory: 256M
+          memory: 2G
 
   memcached:
     image: memcached:1.6-alpine
     container_name: seafile-memcached
-    entrypoint: memcached -m 256
+    entrypoint: memcached -m 1024
     networks:
       - seafile-network
     restart: unless-stopped
@@ -44,9 +44,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 300M
+          memory: 1.5G
         reservations:
-          memory: 256M
+          memory: 1G
 
   seafile:
     image: seafileltd/seafile-mc:latest
@@ -61,7 +61,7 @@ services:
       - SEAFILE_SERVER_HOSTNAME=${SEAFILE_SERVER_HOSTNAME}
       - SEAFILE_SERVER_PROTOCOL=https
       - SEAFILE_SERVER_LETSENCRYPT=false
-      - TIME_ZONE=America/New_York
+      - TIME_ZONE=America/Chicago
     depends_on:
       - seafile-mysql
       - memcached
@@ -77,17 +77,15 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 8G
         reservations:
-          memory: 1G
+          memory: 4G
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
-      - "traefik.http.routers.seafile.rule=Host(`files.bobparsons.dev`)"
+      - "traefik.http.routers.seafile.rule=Host(`files.waugze.com`)"
       - "traefik.http.routers.seafile.entrypoints=http,https"
       - "traefik.http.routers.seafile.tls.certresolver=letsencrypt"
       - "traefik.http.services.seafile.loadbalancer.server.port=80"
       - "traefik.http.routers.seafile.middlewares=security-headers,seafile-timeout"
       - "traefik.http.middlewares.seafile-timeout.timeout.request=3600s"
-
-

@@ -9,10 +9,6 @@ steps:
       # Environment variables from Drone secrets
       SEAFILE_MYSQL_ROOT_PASSWORD:
         from_secret: seafile_mysql_root_password
-      SEAFILE_MYSQL_DB:
-        from_secret: seafile_mysql_db
-      SEAFILE_DATA:
-        from_secret: seafile_data
       SEAFILE_ADMIN_EMAIL:
         from_secret: seafile_admin_email
       SEAFILE_ADMIN_PASSWORD:
@@ -26,9 +22,13 @@ steps:
       # Create dedicated network if it doesn't exist
       - docker network create seafile-network || true
 
-      # Create NAS storage directories
+      # Create storage directories
       - mkdir -p /mnt/nas-direct/seafile-data
-      - mkdir -p /mnt/nas-direct/seafile-mysql
+      - mkdir -p /home/server/files/seafile-mysql
+
+      # Verify storage mounts
+      - ls -la /mnt/nas-direct/seafile-data
+      - ls -la /home/server/files/seafile-mysql
 
       # Stop existing services gracefully
       - docker-compose down || true
@@ -57,7 +57,7 @@ steps:
     commands:
       - apk add --no-cache curl
       - sleep 60 # Wait for services to fully start
-      - curl -f https://files.bobparsons.dev || exit 1
+      - curl -f https://files.waugze.com || exit 1
     when:
       branch:
         - main
@@ -65,6 +65,7 @@ steps:
         - push
     depends_on:
       - deploy
+
 
 ---
 kind: pipeline
@@ -79,7 +80,7 @@ steps:
         from_secret: webhook_success_url
       template: |
         {
-          "text": "✅ Seafile deployment successful on files.bobparsons.dev"
+          "text": "✅ Seafile deployment successful on files.waugze.com"
         }
     when:
       status:
