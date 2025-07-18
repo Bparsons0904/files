@@ -52,7 +52,8 @@ services:
     image: seafileltd/seafile-mc:latest
     container_name: seafile
     volumes:
-      - /mnt/nas-direct/seafile-data:/shared
+      - /home/server/files/seafile:/shared
+      - /mnt/nas-direct/seafile-library:/shared/seafile/seafile-data
     environment:
       - DB_HOST=seafile-mysql
       - DB_ROOT_PASSWD=${SEAFILE_MYSQL_ROOT_PASSWORD}
