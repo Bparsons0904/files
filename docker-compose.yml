@@ -64,6 +64,8 @@ services:
       - SEAFILE_SERVER_HOSTNAME=${SEAFILE_SERVER_HOSTNAME}
       - SEAFILE_SERVER_PROTOCOL=https
       - SEAFILE_SERVER_LETSENCRYPT=false
+      - SERVICE_URL=https://files.waugze.com
+      - FILE_SERVER_ROOT=https://files.waugze.com/seafhttp
       - TIME_ZONE=America/Chicago
     depends_on:
       - seafile-mysql
