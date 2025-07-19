@@ -91,4 +91,4 @@ services:
       - "traefik.http.routers.seafile.tls.certresolver=letsencrypt"
       - "traefik.http.services.seafile.loadbalancer.server.port=80"
       # - "traefik.http.routers.seafile.middlewares=security-headers,seafile-timeout"
-      - "traefik.http.middlewares.seafile-timeout.timeout.request=3600s"
+      # - "traefik.http.middlewares.seafile-timeout.timeout.request=3600s"
