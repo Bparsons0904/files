@@ -54,7 +54,8 @@ services:
     user: "0:0"  # Run as root to avoid ownership issues
     volumes:
       - /home/server/files/seafile:/shared
-      - /mnt/nas-direct/seafile-library:/shared/seafile/seafile-data
+      # Remove the second mount initially, add after setup
+      # - /mnt/nas-direct/seafile-library:/shared/seafile/seafile-data
     environment:
       - DB_HOST=seafile-mysql
       - DB_ROOT_PASSWD=${SEAFILE_MYSQL_ROOT_PASSWORD}
