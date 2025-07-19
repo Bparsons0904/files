@@ -1,0 +1,122 @@
+#
+# A corrected and production-ready docker-compose.yml for Seafile with Traefik
+#
+services:
+  seafile-mysql:
+    image: mariadb:10.11
+    container_name: seafile-mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${SEAFILE_MYSQL_ROOT_PASSWORD}
+      - MYSQL_LOG_CONSOLE=true
+      - MARIADB_AUTO_UPGRADE=1
+    volumes:
+      - /home/server/files/seafile-mysql:/var/lib/mysql
+    networks:
+      - seafile-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  memcached:
+    image: memcached:1.6-alpine
+    container_name: seafile-memcached
+    entrypoint: memcached -m 1024
+    networks:
+      - seafile-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+        reservations:
+          memory: 1G
+
+  seafile:
+    image: seafileltd/seafile-mc:latest
+    container_name: seafile
+    user: "0:0"
+    volumes:
+      - /home/server/files/seafile:/shared
+    environment:
+      # --- Database Settings ---
+      - DB_HOST=seafile-mysql
+      - DB_ROOT_PASSWD=${SEAFILE_MYSQL_ROOT_PASSWORD}
+      # --- Initial Admin User ---
+      - SEAFILE_ADMIN_EMAIL=${SEAFILE_ADMIN_EMAIL}
+      - SEAFILE_ADMIN_PASSWORD=${SEAFILE_ADMIN_PASSWORD}
+      # --- Critical Reverse Proxy Settings ---
+      - SEAFILE_SERVER_HOSTNAME=${SEAFILE_SERVER_HOSTNAME}
+      - SEAFILE_SERVER_PROTOCOL=https
+      - SEAFILE_SERVER_LETSENCRYPT=false
+      - SERVICE_URL=https://${SEAFILE_SERVER_HOSTNAME}
+      - FILE_SERVER_ROOT=https://${SEAFILE_SERVER_HOSTNAME}/seafhttp
+      - ALLOWED_HOSTS=${SEAFILE_SERVER_HOSTNAME}
+      - SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,https
+      - USE_X_FORWARDED_HOST=true
+      - CSRF_TRUSTED_ORIGINS=https://${SEAFILE_SERVER_HOSTNAME} # CORRECTED: Added https:// scheme
+      - FORCE_HTTPS_IN_CONF=true
+      # --- General Settings ---
+      - TIME_ZONE=America/Chicago
+    depends_on:
+      seafile-mysql:
+        condition: service_healthy
+      memcached:
+        condition: service_healthy
+    networks:
+      - traefik
+      - seafile-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+    labels:
+      # --- Core Traefik Enablement ---
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+
+      # --- Middleware: HTTP to HTTPS Redirect ---
+      - "traefik.http.middlewares.seafile-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.seafile-redirect.redirectscheme.permanent=true"
+
+      # --- Router 1: HTTP (Insecure) - Handles Redirection ONLY ---
+      - "traefik.http.routers.seafile-http.rule=Host(`${SEAFILE_SERVER_HOSTNAME}`)"
+      - "traefik.http.routers.seafile-http.entrypoints=web"
+      - "traefik.http.routers.seafile-http.middlewares=seafile-redirect@docker"
+
+      # --- Router 2: HTTPS (Secure) - Handles Application Traffic ---
+      - "traefik.http.routers.seafile-secure.rule=Host(`${SEAFILE_SERVER_HOSTNAME}`)"
+      - "traefik.http.routers.seafile-secure.entrypoints=websecure"
+      - "traefik.http.routers.seafile-secure.tls=true"
+      - "traefik.http.routers.seafile-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.seafile-secure.service=seafile-svc"
+
+      # --- Service Definition for Traefik ---
+      - "traefik.http.services.seafile-svc.loadbalancer.server.port=80"
+
+networks:
+  traefik:
+    external: true
+  seafile-network:
+    external: true

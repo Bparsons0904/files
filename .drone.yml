@@ -1,37 +1,12 @@
 kind: pipeline
 type: docker
-name: seafile-deploy
+name: filebrowser-deploy
 
 steps:
-  - name: cleanup
-    image: docker:24-cli
-    commands:
-      - docker-compose down --volumes || true
-      - docker system prune -f || true
-    when:
-      branch:
-        - main
-      event:
-        - push
-
   - name: deploy
     image: docker:24-cli
-    environment:
-      SEAFILE_MYSQL_ROOT_PASSWORD:
-        from_secret: SEAFILE_MYSQL_ROOT_PASSWORD
-      SEAFILE_ADMIN_EMAIL:
-        from_secret: SEAFILE_ADMIN_EMAIL
-      SEAFILE_ADMIN_PASSWORD:
-        from_secret: SEAFILE_ADMIN_PASSWORD
-      SEAFILE_SERVER_HOSTNAME:
-        from_secret: SEAFILE_SERVER_HOSTNAME
-      # Add these missing variables
-      DB_PASSWORD:
-        from_secret: SEAFILE_MYSQL_ROOT_PASSWORD # Use same as MySQL root password
-      TZ: "America/Chicago" # Or your timezone
     commands:
       - apk add --no-cache docker-compose
-      - docker network create seafile-network || true
       - docker-compose down || true
       - docker-compose pull
       - docker-compose up -d
