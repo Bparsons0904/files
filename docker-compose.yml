@@ -51,7 +51,7 @@ services:
   seafile:
     image: seafileltd/seafile-mc:latest
     container_name: seafile
-    user: "0:0"  # Run as root to avoid ownership issues
+    user: "0:0" # Run as root to avoid ownership issues
     volumes:
       - /home/server/files/seafile:/shared
       # Remove the second mount initially, add after setup
@@ -90,5 +90,5 @@ services:
       - "traefik.http.routers.seafile.entrypoints=http,https"
       - "traefik.http.routers.seafile.tls.certresolver=letsencrypt"
       - "traefik.http.services.seafile.loadbalancer.server.port=80"
-      - "traefik.http.routers.seafile.middlewares=security-headers,seafile-timeout"
+      # - "traefik.http.routers.seafile.middlewares=security-headers,seafile-timeout"
       - "traefik.http.middlewares.seafile-timeout.timeout.request=3600s"
