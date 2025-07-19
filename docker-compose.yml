@@ -6,7 +6,7 @@ services:
     volumes:
       - /mnt/nas-direct/filebrowser:/srv
       - /home/server/files/filebrowser-db:/database
-    # user: "1000:1000"
+    user: "1000:1000"
     networks:
       - traefik
       - filebrowser
