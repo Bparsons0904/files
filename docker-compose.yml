@@ -70,7 +70,7 @@ services:
       - SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,https
       - USE_X_FORWARDED_HOST=true
       - USE_X_FORWARDED_PORT=true
-      - CSRF_TRUSTED_ORIGINS=https://files.waugze.com
+      - CSRF_TRUSTED_ORIGINS=files.waugze.com
       - FORCE_HTTPS_IN_CONF=true
       - TIME_ZONE=America/Chicago
     depends_on:
