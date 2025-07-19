@@ -1,103 +1,74 @@
+version: "3.8"
+
 networks:
-  traefik:
+  traefik-proxy:
     external: true
-  seafile-network:
-    external: true
+  seafile-internal:
+    driver: bridge
+
+volumes:
+  seafile-db:
+  seafile-data:
 
 services:
+  # MariaDB Database
   seafile-mysql:
     image: mariadb:10.11
-    container_name: seafile-mysql
+    restart: unless-stopped
     environment:
-      - MYSQL_ROOT_PASSWORD=${SEAFILE_MYSQL_ROOT_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
       - MYSQL_LOG_CONSOLE=true
       - MARIADB_AUTO_UPGRADE=1
     volumes:
-      - /home/server/files/seafile-mysql:/var/lib/mysql
+      - seafile-db:/var/lib/mysql
     networks:
-      - seafile-network
-    restart: unless-stopped
+      - seafile-internal
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    # deploy:
-    #   resources:
-    #     limits:
-    #       memory: 4G
-    #     reservations:
-    #       memory: 2G
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
 
-  memcached:
-    image: memcached:1.6-alpine
-    container_name: seafile-memcached
-    entrypoint: memcached -m 1024
+  # Memcached
+  seafile-memcached:
+    image: memcached:1.6
+    restart: unless-stopped
+    entrypoint: memcached -m 256
     networks:
-      - seafile-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "11211"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    # deploy:
-    #   resources:
-    #     limits:
-    #       memory: 1.5G
-    #     reservations:
-    #       memory: 1G
+      - seafile-internal
 
+  # Seafile Server
   seafile:
     image: seafileltd/seafile-mc:latest
-    container_name: seafile
-    user: "0:0" # Run as root to avoid ownership issues
+    restart: unless-stopped
+    depends_on:
+      seafile-mysql:
+        condition: service_healthy
+    networks:
+      - traefik-proxy
+      - seafile-internal
     volumes:
-      - /home/server/files/seafile:/shared
-      # Remove the second mount initially, add after setup
-      # - /mnt/nas-direct/seafile-library:/shared/seafile/seafile-data
+      - seafile-data:/shared
     environment:
       - DB_HOST=seafile-mysql
-      - DB_ROOT_PASSWD=${SEAFILE_MYSQL_ROOT_PASSWORD}
+      - DB_ROOT_PASSWD=${DB_PASSWORD}
       - SEAFILE_ADMIN_EMAIL=${SEAFILE_ADMIN_EMAIL}
       - SEAFILE_ADMIN_PASSWORD=${SEAFILE_ADMIN_PASSWORD}
-      - SEAFILE_SERVER_HOSTNAME=${SEAFILE_SERVER_HOSTNAME}
-      - SEAFILE_SERVER_PROTOCOL=https
       - SEAFILE_SERVER_LETSENCRYPT=false
-      - SERVICE_URL=https://files.waugze.com
-      - FILE_SERVER_ROOT=https://files.waugze.com/seafhttp
-      - ALLOWED_HOSTS=files.waugze.com,localhost,127.0.0.1
-      - SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,https
-      - USE_X_FORWARDED_HOST=true
-      - USE_X_FORWARDED_PORT=true
-      - CSRF_TRUSTED_ORIGINS=https://files.waugze.com # Added https:// prefix
-      - FORCE_HTTPS_IN_CONF=true
-      - TIME_ZONE=America/Chicago
-    depends_on:
-      - seafile-mysql
-      - memcached
-    networks:
-      - traefik
-      - seafile-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    # deploy:
-    #   resources:
-    #     limits:
-    #       memory: 8G
-    #     reservations:
-    #       memory: 4G
+      - SEAFILE_SERVER_HOSTNAME=files.waugze.com
+      - TIME_ZONE=${TZ}
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik"
-      - "traefik.http.routers.seafile.rule=Host(`files.waugze.com`)"
-      - "traefik.http.routers.seafile.entrypoints=http,https"
-      - "traefik.http.routers.seafile.tls.certresolver=letsencrypt"
+      - "traefik.docker.network=traefik-proxy"
       - "traefik.http.services.seafile.loadbalancer.server.port=80"
-      - "traefik.http.routers.seafile.middlewares=seafile-headers"
-      - "traefik.http.middlewares.seafile-headers.headers.customRequestHeaders.X-Forwarded-Proto=https"
-      - "traefik.http.middlewares.seafile-headers.headers.customRequestHeaders.X-Forwarded-Host=files.waugze.com"
+      - "traefik.http.routers.seafile.rule=Host(`files.waugze.com`)"
+      - "traefik.http.routers.seafile.entrypoints=websecure"
+      - "traefik.http.routers.seafile.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.seafile.middlewares=seafile-headers@docker,seafile-buffering@docker"
+      - "traefik.http.middlewares.seafile-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.seafile-headers.headers.customrequestheaders.X-Forwarded-Port=443"
+      - "traefik.http.middlewares.seafile-headers.headers.framedeny=true"
+      - "traefik.http.middlewares.seafile-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.seafile-headers.headers.stsseconds=31536000"
+      - "traefik.http.middlewares.seafile-buffering.buffering.maxRequestBodyBytes=10737418240"
+      - "traefik.http.middlewares.seafile-buffering.buffering.memRequestBodyBytes=1073741824"
