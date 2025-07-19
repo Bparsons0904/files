@@ -1,5 +1,4 @@
-version: "3.8"
-
+# Remove the version line (it's obsolete)
 networks:
   traefik:
     external: true
@@ -11,9 +10,9 @@ volumes:
   seafile-data:
 
 services:
-  # MariaDB Database
   seafile-mysql:
     image: mariadb:10.11
+    container_name: seafile-mysql
     restart: unless-stopped
     environment:
       - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
@@ -25,28 +24,26 @@ services:
       - seafile-internal
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 20s
-      timeout: 5s
-      retries: 10
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s # Give MySQL time to initialize
 
-  # Memcached
   seafile-memcached:
-    image: memcached:1.6
+    image: memcached:1.6-alpine
+    container_name: seafile-memcached
     restart: unless-stopped
     entrypoint: memcached -m 256
     networks:
       - seafile-internal
 
-  # Seafile Server
   seafile:
     image: seafileltd/seafile-mc:latest
+    container_name: seafile
     restart: unless-stopped
     depends_on:
       seafile-mysql:
         condition: service_healthy
-    networks:
-      - traefik
-      - seafile-internal
     volumes:
       - seafile-data:/shared
     environment:
@@ -54,21 +51,25 @@ services:
       - DB_ROOT_PASSWD=${DB_PASSWORD}
       - SEAFILE_ADMIN_EMAIL=${SEAFILE_ADMIN_EMAIL}
       - SEAFILE_ADMIN_PASSWORD=${SEAFILE_ADMIN_PASSWORD}
-      - SEAFILE_SERVER_LETSENCRYPT=false
       - SEAFILE_SERVER_HOSTNAME=files.waugze.com
-      - TIME_ZONE=${TZ}
+      - SEAFILE_SERVER_PROTOCOL=https
+      - SEAFILE_SERVER_LETSENCRYPT=false
+      - SERVICE_URL=https://files.waugze.com
+      - FILE_SERVER_ROOT=https://files.waugze.com/seafhttp
+      - FORCE_HTTPS_IN_CONF=true
+      - TIME_ZONE=${TZ:-America/Chicago}
+    networks:
+      - traefik
+      - seafile-internal
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
-      - "traefik.http.services.seafile.loadbalancer.server.port=80"
       - "traefik.http.routers.seafile.rule=Host(`files.waugze.com`)"
-      - "traefik.http.routers.seafile.entrypoints=websecure"
+      - "traefik.http.routers.seafile.entrypoints=http,https"
       - "traefik.http.routers.seafile.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.seafile.middlewares=seafile-headers@docker,seafile-buffering@docker"
+      - "traefik.http.services.seafile.loadbalancer.server.port=80"
+      - "traefik.http.routers.seafile.middlewares=seafile-headers@docker"
+      # Add essential headers middleware
       - "traefik.http.middlewares.seafile-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
       - "traefik.http.middlewares.seafile-headers.headers.customrequestheaders.X-Forwarded-Port=443"
-      - "traefik.http.middlewares.seafile-headers.headers.framedeny=true"
-      - "traefik.http.middlewares.seafile-headers.headers.contenttypenosniff=true"
-      - "traefik.http.middlewares.seafile-headers.headers.stsseconds=31536000"
-      - "traefik.http.middlewares.seafile-buffering.buffering.maxRequestBodyBytes=10737418240"
-      - "traefik.http.middlewares.seafile-buffering.buffering.memRequestBodyBytes=1073741824"
+      - "traefik.http.middlewares.seafile-headers.headers.customrequestheaders.X-Forwarded-Host=files.waugze.com"

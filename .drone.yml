@@ -25,6 +25,10 @@ steps:
         from_secret: SEAFILE_ADMIN_PASSWORD
       SEAFILE_SERVER_HOSTNAME:
         from_secret: SEAFILE_SERVER_HOSTNAME
+      # Add these missing variables
+      DB_PASSWORD:
+        from_secret: SEAFILE_MYSQL_ROOT_PASSWORD # Use same as MySQL root password
+      TZ: "America/Chicago" # Or your timezone
     commands:
       - apk add --no-cache docker-compose
       - docker network create seafile-network || true
