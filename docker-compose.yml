@@ -66,6 +66,12 @@ services:
       - SEAFILE_SERVER_LETSENCRYPT=false
       - SERVICE_URL=https://files.waugze.com
       - FILE_SERVER_ROOT=https://files.waugze.com/seafhttp
+      - ALLOWED_HOSTS=files.waugze.com
+      - SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,https
+      - USE_X_FORWARDED_HOST=true
+      - USE_X_FORWARDED_PORT=true
+      - CSRF_TRUSTED_ORIGINS=https://files.waugze.com
+      - FORCE_HTTPS_IN_CONF=true
       - TIME_ZONE=America/Chicago
     depends_on:
       - seafile-mysql
