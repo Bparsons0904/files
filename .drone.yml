@@ -8,6 +8,7 @@ steps:
     commands:
       - apk add --no-cache docker-compose
       - docker-compose down || true
+      - docker network rm src_filebrowser || true
       - docker-compose pull
       - docker-compose up -d
     when:
